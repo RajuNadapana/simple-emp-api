@@ -2,13 +2,19 @@ pipeline {
     agent any
 
     tools {
-        jdk 'JDK-21'         // must match Jenkins JDK installation
-        maven 'Maven-3.8.4'  // must match Jenkins Maven installation
+        jdk 'JDK-21'         // Must match Jenkins JDK installation
+        maven 'Maven-3.8.4'  // Must match Jenkins Maven installation
     }
 
     environment {
         // Persistent Maven repo outside workspace
         MAVEN_OPTS = "-Dmaven.repo.local=C:\\ProgramData\\Jenkins\\.m2\\repository"
+
+        // SonarCloud settings
+        SONARQUBE_SERVER      = 'Sonar Cloud'                  // Jenkins SonarCloud installation name
+        SONAR_PROJECT_KEY     = 'RajuNadapana_simple-emp-api' // Your SonarCloud project key
+        SONAR_PROJECT_NAME    = 'simple-emp-api'              // Your project name
+        SONAR_ORGANIZATION    = 'RajuNadapana'                // Your SonarCloud organization key
     }
 
     stages {
@@ -31,12 +37,40 @@ pipeline {
                 echo 'Running tests...'
                 bat 'mvn test -B %MAVEN_OPTS%'
             }
+            post {
+                always {
+                    // Publish JUnit reports
+                    junit '**/target/surefire-reports/*.xml'
+                }
+            }
         }
 
-        stage('Package') {
+        stage('SonarQube Analysis') {
             steps {
-                echo 'Packaging the application...'
-                bat 'mvn package -B %MAVEN_OPTS%'
+                echo 'Running SonarCloud analysis...'
+                withSonarQubeEnv(SONARQUBE_SERVER) {
+                    bat """
+                        mvn sonar:sonar ^
+                        -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
+                        -Dsonar.organization=%SONAR_ORGANIZATION% ^
+                        -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
+                        -Dsonar.host.url=https://sonarcloud.io
+                    """
+                }
+            }
+            post {
+                always {
+                    echo 'SonarCloud analysis completed.'
+                }
+            }
+        }
+
+        stage('Quality Gate Check') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    echo 'Waiting for SonarCloud quality gate...'
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
     }
@@ -47,10 +81,10 @@ pipeline {
             cleanWs()
         }
         success {
-            echo 'Build Successful!'
+            echo 'Build & SonarCloud analysis Successful!'
         }
         failure {
-            echo 'Build Failed!'
+            echo 'Build or SonarCloud analysis Failed!'
         }
     }
 }
