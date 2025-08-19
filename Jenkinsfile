@@ -11,10 +11,10 @@ pipeline {
         MAVEN_OPTS = "-Dmaven.repo.local=C:\\ProgramData\\Jenkins\\.m2\\repository"
 
         // SonarCloud settings
-        SONARQUBE_SERVER   = 'Sonar Cloud'                  // Jenkins SonarCloud installation name
-        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api' // Your SonarCloud project key
-        SONAR_PROJECT_NAME = 'simple-emp-api'              // Your project name
-        SONAR_ORGANIZATION = 'rajunadapana'               // SonarCloud organization key (use lowercase key)
+        SONARQUBE_SERVER   = 'Sonar Cloud'                   // Jenkins SonarCloud installation name
+        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api'  // Your SonarCloud project key
+        SONAR_PROJECT_NAME = 'simple-emp-api'               // Your project name
+        SONAR_ORGANIZATION = 'rajunadapana'                // SonarCloud organization key (use lowercase)
     }
 
     stages {
@@ -48,14 +48,17 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 echo 'Running SonarCloud analysis...'
-                withSonarQubeEnv(SONARQUBE_SERVER) {
-                    bat """
-                        mvn sonar:sonar ^
-                        -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
-                        -Dsonar.organization=%SONAR_ORGANIZATION% ^
-                        -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
-                        -Dsonar.host.url=https://sonarcloud.io
-                    """
+                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv(SONARQUBE_SERVER) {
+                        bat """
+                            mvn sonar:sonar ^
+                            -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
+                            -Dsonar.organization=%SONAR_ORGANIZATION% ^
+                            -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
+                            -Dsonar.host.url=https://sonarcloud.io ^
+                            -Dsonar.login=%SONAR_TOKEN%
+                        """
+                    }
                 }
             }
             post {
