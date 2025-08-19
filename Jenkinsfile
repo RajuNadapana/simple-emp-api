@@ -2,46 +2,55 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven-3.8.4'
-        jdk 'JDK-21'
+        jdk 'JDK-21'         // must match Jenkins JDK installation
+        maven 'Maven-3.8.4'  // must match Jenkins Maven installation
+    }
+
+    environment {
+        // Persistent Maven repo outside workspace
+        MAVEN_OPTS = "-Dmaven.repo.local=C:\\ProgramData\\Jenkins\\.m2\\repository"
     }
 
     stages {
         stage('Checkout') {
             steps {
+                echo 'Cloning repository...'
                 git branch: 'main', url: 'https://github.com/RajuNadapana/simple-emp-api.git'
             }
         }
 
         stage('Build') {
             steps {
-                bat 'mvn clean install -B'
+                echo 'Building the project with Maven...'
+                bat 'mvn clean install -B %MAVEN_OPTS%'
             }
         }
 
         stage('Test') {
             steps {
-                bat 'mvn test -B'
+                echo 'Running tests...'
+                bat 'mvn test -B %MAVEN_OPTS%'
             }
         }
 
         stage('Package') {
             steps {
-                bat 'mvn package -B'
+                echo 'Packaging the application...'
+                bat 'mvn package -B %MAVEN_OPTS%'
             }
         }
     }
 
     post {
         always {
-            echo "Cleaning workspace"
+            echo 'Cleaning workspace...'
             cleanWs()
         }
         success {
-            echo "Build Successful!"
+            echo 'Build Successful!'
         }
         failure {
-            echo "Build Failed!"
+            echo 'Build Failed!'
         }
     }
 }
