@@ -2,40 +2,32 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven-3.8.4' // Must match Jenkins Maven installation
-        jdk 'JDK-21'        // Must match Jenkins JDK installation
-    }
-
-    environment {
-        MAVEN_OPTS = "-Dmaven.repo.local=%WORKSPACE%\\.m2\\repository"
+        maven 'Maven-3.8.4'
+        jdk 'JDK-21'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Replace with your real GitHub repo URL
                 git branch: 'main', url: 'https://github.com/RajuNadapana/simple-emp-api.git'
             }
         }
 
         stage('Build') {
             steps {
-                script {
-                    bat 'mkdir %WORKSPACE%\\.m2\\repository'
-                    bat 'mvn clean install -B -Dmaven.repo.local=%WORKSPACE%\\.m2\\repository'
-                }
+                bat 'mvn clean install -B'
             }
         }
 
         stage('Test') {
             steps {
-                bat 'mvn test -B -Dmaven.repo.local=%WORKSPACE%\\.m2\\repository'
+                bat 'mvn test -B'
             }
         }
 
         stage('Package') {
             steps {
-                bat 'mvn package -B -Dmaven.repo.local=%WORKSPACE%\\.m2\\repository'
+                bat 'mvn package -B'
             }
         }
     }
