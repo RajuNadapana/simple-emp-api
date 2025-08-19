@@ -11,10 +11,10 @@ pipeline {
         MAVEN_OPTS = "-Dmaven.repo.local=C:\\ProgramData\\Jenkins\\.m2\\repository"
 
         // SonarCloud settings
-        SONARQUBE_SERVER      = 'Sonar Cloud'                  // Jenkins SonarCloud installation name
-        SONAR_PROJECT_KEY     = 'RajuNadapana_simple-emp-api' // Your SonarCloud project key
-        SONAR_PROJECT_NAME    = 'simple-emp-api'              // Your project name
-        SONAR_ORGANIZATION    = 'RajuNadapana'                // Your SonarCloud organization key
+        SONARQUBE_SERVER   = 'Sonar Cloud'                  // Jenkins SonarCloud installation name
+        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api' // Your SonarCloud project key
+        SONAR_PROJECT_NAME = 'simple-emp-api'              // Your project name
+        SONAR_ORGANIZATION = 'rajunadapana'               // SonarCloud organization key (use lowercase key)
     }
 
     stages {
@@ -39,13 +39,13 @@ pipeline {
             }
             post {
                 always {
-                    // Publish JUnit reports
+                    echo 'Publishing test results...'
                     junit '**/target/surefire-reports/*.xml'
                 }
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('SonarCloud Analysis') {
             steps {
                 echo 'Running SonarCloud analysis...'
                 withSonarQubeEnv(SONARQUBE_SERVER) {
