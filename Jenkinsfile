@@ -2,19 +2,24 @@ pipeline {
     agent any
 
     tools {
-        jdk 'JDK-21'         // Must match Jenkins JDK installation
-        maven 'Maven-3.8.4'  // Must match Jenkins Maven installation
+        jdk 'JDK-21'          // Your Jenkins JDK installation
+        maven 'Maven-3.8.4'   // Your Jenkins Maven installation
     }
 
     environment {
-        // Persistent Maven repo outside workspace
-        MAVEN_OPTS = "-Dmaven.repo.local=C:\\ProgramData\\Jenkins\\.m2\\repository"
+        // SonarCloud configuration
+        SONARQUBE_SERVER   = 'Sonar Cloud'                     // Jenkins SonarCloud server name
+        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api'    // Your SonarCloud project key
+        SONAR_PROJECT_NAME = 'simple-emp-api'                 // Project name
+        SONAR_ORGANIZATION = 'rajunadapana'                   // Organization key (lowercase)
 
-        // SonarCloud settings
-        SONARQUBE_SERVER   = 'Sonar Cloud'                   // Jenkins SonarCloud installation name
-        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api'  // Your SonarCloud project key
-        SONAR_PROJECT_NAME = 'simple-emp-api'               // Your project name
-        SONAR_ORGANIZATION = 'rajunadapana'                // SonarCloud organization key (use lowercase)
+        // Docker / Deployment
+        APP_NAME              = 'simple-emp-api'
+        DOCKER_IMAGE          = "rajunadapana/${APP_NAME}"    
+        CONTAINER_NAME        = 'simple-emp-api'
+        APP_PORT              = '9595'                          
+        DOCKERHUB_CREDENTIALS = 'docker-credentials'          // Jenkins DockerHub credentials ID
+        HOST_PORT_MAPPING     = '9595:9595'
     }
 
     stages {
@@ -27,19 +32,18 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Building the project with Maven...'
-                bat 'mvn clean install -B %MAVEN_OPTS%'
+                echo 'Building project with Maven...'
+                bat 'mvn clean install -B'
             }
         }
 
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                bat 'mvn test -B %MAVEN_OPTS%'
+                bat 'mvn test -B'
             }
             post {
                 always {
-                    echo 'Publishing test results...'
                     junit '**/target/surefire-reports/*.xml'
                 }
             }
@@ -48,17 +52,14 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 echo 'Running SonarCloud analysis...'
-                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv(SONARQUBE_SERVER) {
-                        bat """
-                            mvn sonar:sonar ^
-                            -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
-                            -Dsonar.organization=%SONAR_ORGANIZATION% ^
-                            -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
-                            -Dsonar.host.url=https://sonarcloud.io ^
-                            -Dsonar.login=%SONAR_TOKEN%
-                        """
-                    }
+                withSonarQubeEnv(SONARQUBE_SERVER) {
+                    bat """
+                        mvn sonar:sonar ^
+                        -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
+                        -Dsonar.organization=%SONAR_ORGANIZATION% ^
+                        -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
+                        -Dsonar.host.url=https://sonarcloud.io
+                    """
                 }
             }
             post {
@@ -70,9 +71,41 @@ pipeline {
 
         stage('Quality Gate Check') {
             steps {
+                echo 'Waiting 10 seconds to ensure SonarCloud processed the report...'
+                sleep(time: 10, unit: 'SECONDS')
                 timeout(time: 10, unit: 'MINUTES') {
-                    echo 'Waiting for SonarCloud quality gate...'
+                    echo 'Checking SonarCloud Quality Gate...'
                     waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}"
+                }
+                bat """
+                    echo Building Docker image: %DOCKER_IMAGE%:%IMAGE_TAG%
+                    docker build --pull -t %DOCKER_IMAGE%:%IMAGE_TAG% -t %DOCKER_IMAGE%:latest .
+                """
+            }
+        }
+
+        stage('Docker Push Image') {
+            steps {
+                echo "Logging into Docker registry and pushing image..."
+                withCredentials([usernamePassword(
+                    credentialsId: "%DOCKERHUB_CREDENTIALS%",
+                    usernameVariable: 'DOCKERHUB_USERNAME',
+                    passwordVariable: 'DOCKERHUB_PASSWORD'
+                )]) {
+                    bat '''
+                        echo %DOCKERHUB_PASSWORD% | docker login -u %DOCKERHUB_USERNAME% --password-stdin
+                        docker push %DOCKER_IMAGE%:%IMAGE_TAG%
+                        docker push %DOCKER_IMAGE%:latest
+                        docker logout || true
+                    '''
                 }
             }
         }
@@ -80,14 +113,14 @@ pipeline {
 
     post {
         always {
-            echo 'Cleaning workspace...'
+            echo 'Pipeline completed with status: %BUILD_STATUS%'
             cleanWs()
         }
         success {
-            echo 'Build & SonarCloud analysis Successful!'
+            echo 'Build, tests, SonarCloud analysis, and Docker push were successful!'
         }
         failure {
-            echo 'Build or SonarCloud analysis Failed!'
+            echo 'Pipeline failed! Check logs for details.'
         }
     }
 }
