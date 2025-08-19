@@ -2,24 +2,25 @@ pipeline {
     agent any
 
     tools {
-        jdk 'JDK-21'          // Your Jenkins JDK installation
-        maven 'Maven-3.8.4'   // Your Jenkins Maven installation
+        jdk 'JDK-21'
+        maven 'Maven-3.8.4'
     }
 
     environment {
         // SonarCloud configuration
-        SONARQUBE_SERVER   = 'Sonar Cloud'                     // Jenkins SonarCloud server name
-        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api'    // Your SonarCloud project key
-        SONAR_PROJECT_NAME = 'simple-emp-api'                 // Project name
-        SONAR_ORGANIZATION = 'rajunadapana'                   // Organization key (lowercase)
+        SONARQUBE_SERVER   = 'Sonar Cloud'
+        SONAR_PROJECT_KEY  = 'RajuNadapana_simple-emp-api'
+        SONAR_PROJECT_NAME = 'simple-emp-api'
+        SONAR_ORGANIZATION = 'rajunadapana'
+        SONAR_TOKEN_CRED   = 'sonar-token'   // Jenkins secret text credential ID for SonarCloud token
 
         // Docker / Deployment
-        APP_NAME              = 'simple-emp-api'
-        DOCKER_IMAGE          = "rajunadapana/${APP_NAME}"    
-        CONTAINER_NAME        = 'simple-emp-api'
-        APP_PORT              = '9595'                          
-        DOCKERHUB_CREDENTIALS = 'docker-credentials'          // Jenkins DockerHub credentials ID
-        HOST_PORT_MAPPING     = '9595:9595'
+        APP_NAME            = 'simple-emp-api'
+        DOCKER_IMAGE        = "rajunadapana/${APP_NAME}"    
+        CONTAINER_NAME      = 'simple-emp-api'
+        APP_PORT            = '9595'
+        DOCKERHUB_CREDENTIALS = 'docker-credentials'
+        HOST_PORT_MAPPING   = '9595:9595'
     }
 
     stages {
@@ -52,14 +53,17 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 echo 'Running SonarCloud analysis...'
-                withSonarQubeEnv(SONARQUBE_SERVER) {
-                    bat """
-                        mvn sonar:sonar ^
-                        -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
-                        -Dsonar.organization=%SONAR_ORGANIZATION% ^
-                        -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
-                        -Dsonar.host.url=https://sonarcloud.io
-                    """
+                withCredentials([string(credentialsId: SONAR_TOKEN_CRED, variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv(SONARQUBE_SERVER) {
+                        bat """
+                            mvn sonar:sonar ^
+                            -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
+                            -Dsonar.organization=%SONAR_ORGANIZATION% ^
+                            -Dsonar.projectName=%SONAR_PROJECT_NAME% ^
+                            -Dsonar.host.url=https://sonarcloud.io ^
+                            -Dsonar.login=%SONAR_TOKEN%
+                        """
+                    }
                 }
             }
             post {
@@ -96,7 +100,7 @@ pipeline {
             steps {
                 echo "Logging into Docker registry and pushing image..."
                 withCredentials([usernamePassword(
-                    credentialsId: "%DOCKERHUB_CREDENTIALS%",
+                    credentialsId: DOCKERHUB_CREDENTIALS,
                     usernameVariable: 'DOCKERHUB_USERNAME',
                     passwordVariable: 'DOCKERHUB_PASSWORD'
                 )]) {
@@ -109,6 +113,17 @@ pipeline {
                 }
             }
         }
+
+        stage('Run Docker Container') {
+            steps {
+                echo 'Starting Docker container...'
+                bat """
+                    docker stop %CONTAINER_NAME% || true
+                    docker rm %CONTAINER_NAME% || true
+                    docker run -d --name %CONTAINER_NAME% -p %HOST_PORT_MAPPING% %DOCKER_IMAGE%:%IMAGE_TAG%
+                """
+            }
+        }
     }
 
     post {
@@ -117,7 +132,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo 'Build, tests, SonarCloud analysis, and Docker push were successful!'
+            echo 'Build, tests, SonarCloud analysis, Docker push, and container run were successful!'
         }
         failure {
             echo 'Pipeline failed! Check logs for details.'
